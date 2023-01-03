@@ -1,8 +1,8 @@
 package raspberry
 
 import (
+	"bytes"
 	"fmt"
-	_ "github.com/gostonefire/water-heater/common"
 	"net"
 	"strconv"
 )
@@ -50,17 +50,17 @@ func NewRaspberry(ipAddress string, ipPort uint16, dacBias float64) (device *Ras
 
 // Close - Sets the output voltage to dacBias, hence it doesn't really close anything but here for convenience
 func (R *Raspberry) Close() (err error) {
-	err = R.SetDACVoltage(0.0)
+	_, err = R.SetDACVoltage(0.0)
 	return
 }
 
-// GetRTDTemperature - Reads temperature from RTD device and returns as a float value
+// GetRTDTemperature - Reads temperature from RTD raspberry and returns as a float value
 func (R *Raspberry) GetRTDTemperature() (temp float64, err error) {
 	temp, err = R.sendCmd("temp:0000000000")
 	return
 }
 
-// GetRTDOhms - Reads resistance from RTD device and returns as a float value
+// GetRTDOhms - Reads resistance from RTD raspberry and returns as a float value
 func (R *Raspberry) GetRTDOhms() (ohms float64, err error) {
 	ohms, err = R.sendCmd("ohms:0000000000")
 	return
@@ -68,9 +68,18 @@ func (R *Raspberry) GetRTDOhms() (ohms float64, err error) {
 
 // SetDACVoltage - Sets the output voltage from the DAC
 // - rvOut is the relative value (0.0-1.0) of the output voltage to set between DAC bias and 5 volts
-func (R *Raspberry) SetDACVoltage(rvOut float64) (err error) {
+// It returns the theoretical output in voltage, but the DAC doesn't permit the actual value to be read,
+// should be close enough anyway.
+func (R *Raspberry) SetDACVoltage(rvOut float64) (vout float64, err error) {
+	if rvOut < 0.0 || rvOut > 1.0 {
+		err = fmt.Errorf("rvOut outside permitted range 0.0 to 1.0: %f", rvOut)
+		return
+	}
+
 	sloped := rvOut*R.biasSlope + R.biasIntercept
 	cmd := fmt.Sprintf("vout:%010.3f", sloped)
+
+	vout = sloped * maxVout
 
 	_, err = R.sendCmd(cmd)
 	return
@@ -86,30 +95,31 @@ func (R *Raspberry) GetMaxDACVoltage() (vout float64) {
 	return maxVout
 }
 
-// sendCmd - Sends a command with its value to the device
+// sendCmd - Sends a command with its value to the raspberry
 func (R *Raspberry) sendCmd(cmd string) (value float64, err error) {
 	conn, err := net.Dial("tcp", R.address)
 	if err != nil {
-		fmt.Printf("error while connecting to server: %s\n", err)
+		err = fmt.Errorf("error while connecting to server: %s\n", err)
 		return
 	}
 	defer func(conn net.Conn) { _ = conn.Close() }(conn)
 
 	_, err = conn.Write([]byte(cmd))
 	if err != nil {
-		fmt.Printf("error while writing to server: %s\n", err)
+		err = fmt.Errorf("error while writing to server: %s\n", err)
 		return
 	}
 
 	buf := make([]byte, 1024)
 	_, err = conn.Read(buf)
 	if err != nil {
-		fmt.Printf("error while reading from server: %s\n", err)
+		err = fmt.Errorf("error while reading from server: %s\n", err)
 		return
 	}
 
 	// Convert to float64, first 5 bytes are command + colon, e.g. "temp:"
-	value, err = strconv.ParseFloat(string(buf[5:]), 64)
+	strVal := string(bytes.Trim(buf[5:], "\x00"))
+	value, err = strconv.ParseFloat(strVal, 64)
 
 	return
 }

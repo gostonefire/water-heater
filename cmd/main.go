@@ -2,34 +2,34 @@ package main
 
 import (
 	"fmt"
-	"net"
+	"github.com/gostonefire/water-heater"
+	"github.com/gostonefire/water-heater/internal/raspberry"
+	"time"
 )
 
 func main() {
-	cmd := "vout:00000000.0"
-	address := "192.168.1.138:5000"
-
-	conn, err := net.Dial("tcp", address)
+	device, err := raspberry.NewRaspberry("192.168.1.138", 5000, 1.0)
 	if err != nil {
-		fmt.Printf("error while connecting to server: %s\n", err)
+		fmt.Println(err)
 		return
 	}
-	defer func(conn net.Conn) { _ = conn.Close() }(conn)
+	defer func(device *raspberry.Raspberry) { _ = device.Close() }(device)
 
-	_, err = conn.Write([]byte(cmd))
+	wh := waterheater.NewWaterHeater(device)
+
+	temp, err := wh.GetTemp()
 	if err != nil {
-		fmt.Printf("error while writing to server: %s\n", err)
-		return
+		panic(err)
 	}
+	fmt.Printf("Current temperature: %.2f\n", temp)
 
-	buf := make([]byte, 1024)
-	n, err := conn.Read(buf)
-	if err != nil {
-		fmt.Printf("error while reading from server: %s\n", err)
-		return
+	var vout float64
+	for i := 0.0; i <= 1.0; i += 0.1 {
+		vout, err = wh.SetHeat(i)
+		if err != nil {
+			panic(err)
+		}
+		fmt.Printf("Heat stear signal set to %.2f volt\n", vout)
+		time.Sleep(3 * time.Second)
 	}
-
-	fmt.Println(n)
-	fmt.Println(string(buf))
-
 }
