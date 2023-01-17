@@ -2,7 +2,6 @@ package main
 
 import (
 	"fmt"
-	"github.com/gostonefire/water-heater/internal/pid"
 	"github.com/gostonefire/water-heater/internal/simulation"
 	"gonum.org/v1/plot"
 	"gonum.org/v1/plot/plotter"
@@ -11,10 +10,10 @@ import (
 )
 
 func main() {
-	Ts := 96.0
+	Ts := 95.0
 	Th := 15.0
 	Ta := 0.0
-	nPlot := 600
+	nPlot := 480
 
 	// Set up plot
 	p := plot.New()
@@ -25,17 +24,15 @@ func main() {
 
 	pts := make(plotter.XYs, nPlot)
 
-	// Set up simulator and PID regulator
 	sim := simulation.NewSim(0, Ta, Th)
-	control := pid.NewPID(2, 0.112, 135)
 
+	Vd := 1.0
 	for i := 0; i < nPlot; i++ {
-		Vd := control.UpdatePID(Ts-Th, Th)
-
 		Th = sim.SimIter(Vd, Ta)
 		if Th > 100.0 {
 			Th = 100.0
-			sim = simulation.NewSim(0, Ta, Th)
+			Vd = 0
+			sim = simulation.NewSim(Vd, Ta, Th)
 		}
 
 		pts[i].X = float64(i)
@@ -51,6 +48,15 @@ func main() {
 	ls.LineStyle.Color = color.RGBA{B: 200, A: 200}
 	ls.LineStyle.Dashes = []vg.Length{vg.Points(5), vg.Points(5)}
 
+	// Add 2 minute line to plot
+	lm, err := plotter.NewLine(plotter.XYs{{X: 120, Y: 0}, {X: 120, Y: 100}})
+	if err != nil {
+		panic(err)
+	}
+	lm.LineStyle.Width = vg.Points(1)
+	lm.LineStyle.Color = color.RGBA{G: 200, A: 200}
+	lm.LineStyle.Dashes = []vg.Length{vg.Points(5), vg.Points(5)}
+
 	lt, err := plotter.NewLine(pts)
 	if err != nil {
 		panic(err)
@@ -58,12 +64,13 @@ func main() {
 	lt.LineStyle.Width = vg.Points(1)
 	lt.LineStyle.Color = color.RGBA{R: 255, A: 255}
 
-	p.Add(ls, lt)
+	p.Add(ls, lm, lt)
 	p.Legend.Add("SetTemp", ls)
 	p.Legend.Add("Temp", lt)
 
-	fName := fmt.Sprintf("wh_%d_%.3f_%d_%d.png", int(Ts), control.IntegratGain, int(control.PropGain), int(control.DerGain))
+	fName := fmt.Sprintf("wh_trim.png")
 	if err = p.Save(6*vg.Inch, 4*vg.Inch, fName); err != nil {
 		panic(err)
 	}
+
 }

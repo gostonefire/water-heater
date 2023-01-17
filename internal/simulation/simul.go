@@ -6,8 +6,11 @@ import (
 
 const Tau1 float64 = 0.1
 const Tau2 float64 = 0.3
-const kh float64 = 300
-const stepTime float64 = 0.00167
+
+// const kh float64 = 300
+// const stepTime float64 = 0.00167
+const kh float64 = 800
+const stepTime float64 = 0.0008
 
 type Sim struct {
 	Aj []float64
