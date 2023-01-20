@@ -16,3 +16,6 @@
 
 # Avoid documentation
 doc/
+
+# Avoid temp directory
+tmp/
